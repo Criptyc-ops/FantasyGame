@@ -5,6 +5,11 @@ A text-based adventure game set in the magical Kingdom of Eldoria
 
 import sys
 import time
+try:
+    import temporal_anomaly as anomaly
+    ANOMALY_ENABLED = True
+except ImportError:
+    ANOMALY_ENABLED = False
 
 # Game Constants
 GAME_TITLE = "FANTASY QUEST: The Dragon's Curse"
@@ -64,7 +69,7 @@ locations = {
     },
     'cave': {
         'name': 'Crystal Cave',
-        'description': 'Shimmering crystals line the walls of this underground chamber, casting rainbow reflections everywhere. The air hums with magical energy.',
+        'description': 'Shimmering crystals line the walls of this underground chamber, casting rainbow reflections everywhere. The air hums with magical energy.\n\n\033[96mOne crystal pulses with an unusual blue resonance. It feels warm, almost alive.\033[0m',
         'exits': {'south': 'forest'},
         'items': ['crystal_shard'],
         'npc': None
@@ -151,7 +156,8 @@ npcs = {
             'The ancient dragon Vezareth has awakened and stolen the Crown of Eldoria!',
             'Without the crown, our kingdom will fall into chaos and darkness.',
             'You must retrieve the crown from the dragon\'s lair atop Dragon\'s Peak!',
-            'Speak with the wizard in his tower. He may have magic that can help you.'
+            'Speak with the wizard in his tower. He may have magic that can help you.',
+            '\033[90m*The elder rubs his temples* I keep having strange dreams of silver lights in the forest...\033[0m'
         ],
         'quest_given': True,
         'reward': 'healing_potion'
@@ -196,7 +202,8 @@ npcs = {
             'The trees whisper of your coming, young hero.',
             'I have lived in these woods for decades, gathering rare herbs and mushrooms.',
             'This magic mushroom will enhance your vitality when consumed.',
-            'Beware the dragon\'s fire. It burns hotter than any forge in the kingdom.'
+            'Beware the dragon\'s fire. It burns hotter than any forge in the kingdom.',
+            '\033[90m*He squints northeast* The lights have been strange lately. Blue. Wrong color for foxfire...\033[0m'
         ],
         'requires_item': None,
         'reward': 'magic_mushroom'
@@ -291,7 +298,9 @@ class Game:
         self.player = None
         self.game_running = True
         self.dragon_defeated = False
-        
+        if ANOMALY_ENABLED:
+            anomaly.on_game_start()
+
     def slow_print(self, text, delay=0.03):
         """Print text with typewriter effect for dramatic moments"""
         for char in text:
@@ -347,6 +356,12 @@ class Game:
     
     def process_command(self, command):
         """Process player commands"""
+        if ANOMALY_ENABLED:
+            handled = anomaly.check_secret_command(command, self, self.player, locations, npcs, items)
+            if handled:
+                return
+        elif verb == 'rest' or verb == 'sleep':
+            print("You find a safe spot to rest for a while...")
         command = command.strip().lower()
         parts = command.split()
         
