@@ -83,6 +83,10 @@
 - Map System: Shows discovered locations
 - Character Sheet: Comprehensive stat display
 
+### 13. Secret spell
+- secret room in the town
+- admin password access
+
 ## How to Play
 1. Choose difficulty (Easy/Normal/Hard/Nightmare)
 2. Use `help` for commands
@@ -92,7 +96,7 @@
 6. Defeat the dragon and retrieve the Crown!
 
 ## Commands
-- Movement: `north`, `south`, `east`, `west`
+- Movement: `north`, `south`, `east`, `west`, `mount`
 - Actions: `take`, `drop`, `use`, `equip`, `unequip`, `talk`, `rest`
 - Info: `inventory`, `stats`, `quests`, `journal`, `map`, `craft`, `help`
 - System: `quit`, `exit`

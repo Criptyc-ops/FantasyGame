@@ -61,6 +61,7 @@ class DamageType(Enum):
     LIGHTNING = "lightning"
     POISON = "poison"
     HOLY = "holy"
+    DARK = "dark"
 
 @dataclass
 class Quest:
@@ -296,6 +297,14 @@ SKILLS = {
         mana_cost=25,
         level_required=5
     ),
+    'doom': Skill(
+        name="Doom",
+        description="A forbidden incantation that tears reality apart. Only the most dangerous words can unleash it.",
+        damage_type=DamageType.DARK,
+        base_damage=999,
+        mana_cost=50,
+        level_required=8
+    ),
     'poison_dart': Skill(
         name="Poison Dart",
         description="Throw a poisoned dart that deals damage over time.",
@@ -312,7 +321,7 @@ SKILLS = {
 locations = {
     'village': {
         'name': 'Thorndale Village',
-        'description': "A quaint medieval village with cobblestone streets and thatched-roof cottages. The air smells of fresh bread from the bakery, and you can hear the blacksmith's hammer in the distance. Children play in the square while elders watch from wooden benches.",
+        'description': "A quaint medieval village with cobblestone streets and thatched-roof cottages. The air smells of fresh bread from the bakery, and you can hear the blacksmith's hammer in the distance. Children play in the square while elders watch from wooden benches. A faint whisper seems to come from the old stone wall at the edge of town.",
         'exits': {'north': 'forest', 'east': 'market', 'south': 'tavern'},
         'items': ['healing_potion', 'healing_potion'],
         'npc': 'elder',
@@ -440,6 +449,16 @@ locations = {
         'danger_level': 0,
         'encounter_chance': 0.0,
         'special': 'mount_shop'
+    },
+    'secret_room': {
+        'name': 'Hidden Chamber',
+        'description': "A secret room hidden beneath Thorndale Village. Strange runes glow faintly on the walls and a stone pedestal stands at the center, waiting for the right words.",
+        'exits': {'north': 'village'},
+        'items': [],
+        'npc': None,
+        'danger_level': 0,
+        'encounter_chance': 0.0,
+        'special': None
     }
 }
 
@@ -1212,6 +1231,7 @@ class Game:
         self.turn_count = 0
         self.current_enemy = None
         self.in_combat = False
+        self.secret_ending_triggered = False
         self.difficulty_modifiers = {
             'easy': 0.7,
             'normal': 1.0,
@@ -1315,6 +1335,63 @@ class Game:
             print(Colors.CYAN + "\n[Quest Hub - Check the 'board' for jobs]" + Colors.RESET)
 
         print(Colors.YELLOW + f"{'='*60}" + Colors.RESET)
+
+    def enter_password(self, phrase=None):
+        """Enter a secret password in the village or secret room."""
+        if phrase is None:
+            if self.player.current_location == 'village':
+                phrase = input("Enter the hidden password: ").strip()
+            elif self.player.current_location == 'secret_room':
+                phrase = input("Enter the spell password: ").strip()
+            else:
+                print("There is nothing to enter here.")
+                return
+
+        if self.player.current_location == 'village':
+            if phrase == "ThisGameSucks":
+                print(Colors.PURPLE + "\nA hidden panel in the wall slides open, revealing a spiraling stairway downward..." + Colors.RESET)
+                self.player.current_location = 'secret_room'
+                if 'secret_room' not in self.player.discovered_locations:
+                    self.player.discovered_locations.append('secret_room')
+                if 'secret_room' not in self.player.visited_locations:
+                    self.player.visited_locations.append('secret_room')
+                self.display_location()
+            else:
+                print(Colors.RED + "\nThe stone wall remains silent. The password was rejected." + Colors.RESET)
+
+        elif self.player.current_location == 'secret_room':
+            if phrase == "WannaBlowUp":
+                if 'doom' not in self.player.spells_learned:
+                    self.player.spells_learned.append('doom')
+                    print(Colors.RED + Colors.BOLD + "\nA forbidden text scrolls open before you... You have learned the Doom spell!" + Colors.RESET)
+                    print(Colors.DARK_GRAY + "This spell devours reality itself when cast upon an enemy. Choose wisely." + Colors.RESET)
+                else:
+                    print(Colors.YELLOW + "The dark words are already etched into your mind." + Colors.RESET)
+            else:
+                print(Colors.RED + "\nThe rune circle flares and rejects your words. The spell password is wrong." + Colors.RESET)
+        else:
+            print("The password has no effect here.")
+
+    def trigger_doom_ending(self):
+        """Trigger the secret doom ending when Doom is cast."""
+        self.secret_ending_triggered = True
+        self.game_running = False
+        self.player.current_location = 'tavern'
+        self.print_header("SECRET ENDING: THE WORLD ENDS", Colors.RED)
+        self.slow_print("The Doom spell tears the battlefield apart. An endless blackness swallows the sky.", 0.04)
+        self.slow_print("The world collapses in a single, impossible moment.", 0.04)
+        self.slow_print("Then, you are ripped free from the nightmare...", 0.04)
+        print(Colors.PURPLE + "\nYou awaken in The Prancing Pony Tavern, heart pounding. The dream of destruction fades like smoke." + Colors.RESET)
+        print(Colors.CYAN + "The tavern smells of ale and stew. A bard strums a lute in the corner. You survived, but the memory of doom remains." + Colors.RESET)
+        print(Colors.YELLOW + "\n=== THE END ===" + Colors.RESET)
+
+    def handle_doom_spell(self, enemy, skill):
+        """Handle the special Doom spell effect in combat."""
+        print(Colors.PURPLE + "\nYou utter the forbidden words of Doom..." + Colors.RESET)
+        self.slow_print("Reality fractures. The battlefield is consumed by a void of absolute destruction.", 0.04)
+        self.trigger_doom_ending()
+        self.in_combat = False
+        self.current_enemy = None
 
     def check_random_encounter(self):
         """Check for random encounters when entering dangerous areas"""
@@ -1454,6 +1531,10 @@ class Game:
                         if not self.player.use_mana(skill.mana_cost):
                             print(Colors.RED + "\nNot enough mana!" + Colors.RESET)
                             continue
+
+                        if spell_name == 'doom':
+                            self.handle_doom_spell(enemy, skill)
+                            return
 
                         damage = self.player.get_spell_damage(spell_name)
 
@@ -1622,7 +1703,8 @@ class Game:
 
     def process_command(self, command):
         """Process player commands"""
-        command = command.strip().lower()
+        original_command = command.strip()
+        command = original_command.lower()
         parts = command.split()
 
         if not parts:
@@ -1699,6 +1781,16 @@ class Game:
 
         elif verb == 'travel' or verb == 'mount':
             self.fast_travel()
+
+        elif verb == 'enter':
+            if len(parts) > 1 and parts[1] == 'password':
+                phrase = None
+                original_parts = original_command.split(' ', 2)
+                if len(original_parts) > 2:
+                    phrase = original_parts[2].strip()
+                self.enter_password(phrase)
+            else:
+                print("Enter what? Try 'enter password'.")
 
         elif verb == 'help' or verb == 'h' or verb == '?':
             self.show_help()
@@ -2376,6 +2468,7 @@ class Game:
         print("  take/get [item] - Pick up item")
         print("  drop [item] - Drop item")
         print("  use [item] - Use consumable or examine item")
+        print("  enter password [phrase] - Try a secret password")
         print("  equip [item] - Equip weapon/armor")
         print("  unequip [item] - Unequip item")
         print("  talk - Talk to NPC")
