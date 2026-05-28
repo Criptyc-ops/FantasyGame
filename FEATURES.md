@@ -83,21 +83,16 @@
 - Map System: Shows discovered locations
 - Character Sheet: Comprehensive stat display
 
-### 13. Removed Features
-- Temporal Anomaly Easter Egg: Completely removed
-- Simplified Combat: Replaced with full turn-based system
-
 ## How to Play
-1. Run: `python fantasygame_enhanced.py`
-2. Choose difficulty (Easy/Normal/Hard/Nightmare)
-3. Use `help` for commands
-4. Follow the main quest line by talking to NPCs
-5. Explore dangerous areas for encounters and loot
-6. Level up through combat and quest completion
-7. Defeat the dragon and retrieve the Crown!
+1. Choose difficulty (Easy/Normal/Hard/Nightmare)
+2. Use `help` for commands
+3. Follow the main quest line by talking to NPCs
+4. Explore dangerous areas for encounters and loot
+5. Level up through combat and quest completion
+6. Defeat the dragon and retrieve the Crown!
 
 ## Commands
-- Movement: `north`, `south`, `east`, `west` (or `n`, `s`, `e`, `w`)
+- Movement: `north`, `south`, `east`, `west`
 - Actions: `take`, `drop`, `use`, `equip`, `unequip`, `talk`, `rest`
 - Info: `inventory`, `stats`, `quests`, `journal`, `map`, `craft`, `help`
 - System: `quit`, `exit`

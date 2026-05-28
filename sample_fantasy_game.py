@@ -600,6 +600,13 @@ items = {
         'value': 200,
         'rarity': 'epic'
     },
+    'rare_gem': {
+        'name': 'Rare Gem',
+        'description': "A beautifully cut gem that glows faintly with arcane energy. Worth a fortune to the right buyer.",
+        'type': 'valuable',
+        'value': 300,
+        'rarity': 'legendary'
+    },
     'ruined_scroll': {
         'name': 'Ruined Scroll',
         'description': "A damaged scroll containing fragments of a powerful spell. Could be restored by a skilled wizard.",
@@ -823,7 +830,9 @@ npcs = {
         'requires_item': None,
         'reward': None,
         'shop': True,
-        'shop_items': ['healing_potion', 'mana_potion', 'rope', 'torch', 'climbing_gear', 'lockpick']
+        'shop_items': ['healing_potion', 'mana_potion', 'rope', 'torch', 'climbing_gear', 'lockpick'],
+        'gives_quest': 'merchant_protection',
+        'reputation_effect': 10
     },
     'hermit': {
         'name': 'Forest Hermit Graybeard',
@@ -893,7 +902,9 @@ npcs = {
         'reward': None,
         'shop': True,
         'shop_items': ['horse_brush', 'apple'],
-        'service': 'mount_rental'
+        'service': 'mount_rental',
+        'gives_quest': 'stable_challenge',
+        'reputation_effect': 10
     }
 }
 
@@ -1018,6 +1029,52 @@ QUESTS = {
         location='underground_lake',
         xp_reward=200,
         gold_reward=100
+    ),
+    'stable_challenge': Quest(
+        id='stable_challenge',
+        name='Stable Challenge',
+        description="Stablemaster Hrothgar wants to see your skills. Rent a mount, visit Dragon's Peak, and return safely to the stables.",
+        quest_type=QuestType.SIDE,
+        objectives=[
+            "Rent a mount from Stablemaster Hrothgar",
+            "Travel to Dragon's Peak",
+            "Return to the stables"
+        ],
+        rewards={'xp': 150, 'gold': 75, 'item': 'apple'},
+        giver='stablemaster',
+        location='stable',
+        xp_reward=150,
+        gold_reward=75
+    ),
+    'wizard_research': Quest(
+        id='wizard_research',
+        name="Wizard's Research",
+        description="Archmage Zephyrus asks you to bring him two ancient relics from the ruins for his arcane experiments.",
+        quest_type=QuestType.SIDE,
+        objectives=[
+            "Collect 2 Ancient Relics",
+            "Return to the Wizard"
+        ],
+        rewards={'xp': 200, 'gold': 100, 'spell': 'ice_shard'},
+        giver='wizard',
+        location='tower',
+        xp_reward=200,
+        gold_reward=100
+    ),
+    'merchant_protection': Quest(
+        id='merchant_protection',
+        name='Merchant Protection',
+        description="Trader Matthias is worried about bandits and goblins on his trade routes. Defeat 5 foes and bring back proof.",
+        quest_type=QuestType.BOUNTY,
+        objectives=[
+            "Defeat 5 bandits or goblins",
+            "Return to Trader Matthias"
+        ],
+        rewards={'xp': 250, 'gold': 125, 'item': 'rare_gem'},
+        giver='merchant',
+        location='market',
+        xp_reward=250,
+        gold_reward=125
     )
 }
 
@@ -1046,6 +1103,13 @@ class Player:
         self.spells_learned = []
         self.combat_skill = 1
         self.magic_power = 1
+        self.strength = 5
+        self.agility = 5
+        self.intelligence = 5
+        self.endurance = 5
+        self.charisma = 5
+        self.max_stamina = 50
+        self.stamina = 50
         self.defense = 0
         self.luck = 1
         self.equipped_weapon = None
@@ -1059,10 +1123,26 @@ class Player:
         self.has_mount = False
         self.reputation = {
             'village': 0,
+            'forest': 0,
+            'tower': 0,
             'castle': 0,
+            'market': 0,
+            'tavern': 0,
+            'stable': 0,
             'wizard': 0,
-            'merchant': 0
+            'merchant': 0,
+            'underground_lake': 0,
+            'ruins': 0,
+            'mine': 0,
+            'cave': 0,
+            'lair': 0,
+            'mountain': 0
         }
+
+    def adjust_reputation(self, region, amount):
+        """Adjust reputation in a region."""
+        self.reputation[region] = self.reputation.get(region, 0) + amount
+        return self.reputation[region]
 
     def take_damage(self, amount):
         """Apply damage to player, accounting for defense"""
@@ -1082,10 +1162,21 @@ class Player:
         """Restore mana"""
         self.mana = min(self.mana + amount, self.max_mana)
 
+    def restore_stamina(self, amount):
+        """Restore stamina"""
+        self.stamina = min(self.stamina + amount, self.max_stamina)
+
     def use_mana(self, amount):
         """Use mana for spells"""
         if self.mana >= amount:
             self.mana -= amount
+            return True
+        return False
+
+    def use_stamina(self, amount):
+        """Use stamina for physical attacks and defensive actions"""
+        if self.stamina >= amount:
+            self.stamina -= amount
             return True
         return False
 
@@ -1103,12 +1194,19 @@ class Player:
         """Level up the player"""
         self.level += 1
         self.xp_to_next = int(self.xp_to_next * 1.5)
-        self.max_health += 15
+        self.max_health += 15 + self.endurance
         self.health = self.max_health
-        self.max_mana += 10
+        self.max_mana += 10 + self.intelligence
         self.mana = self.max_mana
+        self.max_stamina += 10 + self.endurance
+        self.stamina = self.max_stamina
         self.combat_skill += 1
         self.magic_power += 1
+        self.strength += 1
+        self.agility += 1
+        self.intelligence += 1
+        self.endurance += 1
+        self.charisma += 1
         self.luck += 0.5
 
     def add_item(self, item_key):
@@ -1164,11 +1262,19 @@ class Player:
 
     def get_attack_damage(self):
         """Calculate attack damage"""
-        base = 5 + (self.combat_skill * 3) + (self.level * 2)
+        base = 5 + (self.strength * 3) + (self.combat_skill * 2) + (self.level * 2)
         if self.equipped_weapon and items[self.equipped_weapon]['type'] == 'weapon':
             base += items[self.equipped_weapon].get('damage_bonus', 0)
-        variation = random.randint(-2, 3)
+        if self.stamina >= 5:
+            self.use_stamina(5)
+        else:
+            base = max(base // 2, 1)
+        variation = random.randint(-3, 4)
         return max(base + variation, 1)
+
+    def get_dodge_chance(self):
+        """Calculate dodge chance based on agility and luck"""
+        return min(0.35 + (self.agility * 0.015) + (self.luck * 0.01), 0.55)
 
     def get_spell_damage(self, spell_name):
         """Calculate spell damage"""
@@ -1176,7 +1282,7 @@ class Player:
             return 0
         skill = SKILLS[spell_name]
         base = skill.base_damage
-        multiplier = 1 + (self.magic_power * 0.2) + (self.level * 0.1)
+        multiplier = 1 + (self.magic_power * 0.15) + (self.intelligence * 0.1) + (self.level * 0.05)
         return int(base * multiplier)
 
     def get_stats(self):
@@ -1187,9 +1293,15 @@ class Player:
             'xp_to_next': self.xp_to_next,
             'health': f"{self.health}/{self.max_health}",
             'mana': f"{self.mana}/{self.max_mana}",
+            'stamina': f"{self.stamina}/{self.max_stamina}",
             'gold': self.gold,
             'combat_skill': self.combat_skill,
             'magic_power': self.magic_power,
+            'strength': self.strength,
+            'agility': self.agility,
+            'intelligence': self.intelligence,
+            'endurance': self.endurance,
+            'charisma': self.charisma,
             'defense': self.defense,
             'luck': self.luck,
             'inventory_count': len(self.inventory),
@@ -1197,7 +1309,8 @@ class Player:
             'quests_active': len([q for q in self.quests.values() if q.status == QuestStatus.ACTIVE]),
             'quests_completed': len(self.completed_quests),
             'enemies_defeated': self.enemies_defeated,
-            'deaths': self.deaths
+            'deaths': self.deaths,
+            'reputation': dict(self.reputation)
         }
 
  
@@ -1306,15 +1419,68 @@ class Game:
             npc_name = npcs[location['npc']]['name']
             print(Colors.PURPLE + f"\n{npc_name} is here." + Colors.RESET)
 
+        rep_region = self.player.reputation.get(self.player.current_location, 0)
+        if rep_region != 0:
+            rep_label = "Neutral"
+            if rep_region >= 50:
+                rep_label = "Friendly"
+            elif rep_region <= -20:
+                rep_label = "Hostile"
+            elif rep_region < 0:
+                rep_label = "Distrustful"
+            print(Colors.CYAN + f"\nReputation here: {rep_region} ({rep_label})" + Colors.RESET)
+
         special = location.get('special')
         if special == 'rest_area':
             print(Colors.CYAN + "\n[Rest Area - You can 'rest' here to recover]" + Colors.RESET)
         elif special == 'shop':
-            print(Colors.CYAN + "\n[Market - You can 'trade' with merchants]" + Colors.RESET)
+            print(Colors.CYAN + "\n[Market - Talk to merchants or 'board' for quests]" + Colors.RESET)
         elif special == 'quest_hub':
             print(Colors.CYAN + "\n[Quest Hub - Check the 'board' for jobs]" + Colors.RESET)
+        elif special == 'mount_shop':
+            print(Colors.CYAN + "\n[Stable - Rent a mount and use 'travel' or 'mount' to fast travel]" + Colors.RESET)
+
+        print(Colors.PURPLE + Colors.BOLD + "\n--- PLAYER STATUS ---" + Colors.RESET)
+        print(f"Health: {self.player.health}/{self.player.max_health} | Mana: {self.player.mana}/{self.player.max_mana}")
+        print(f"Gold: {self.player.gold} | Level: {self.player.level} | XP: {self.player.xp}/{self.player.xp_to_next}")
+        equipped = []
+        if self.player.equipped_weapon:
+            equipped.append(f"Weapon: {items[self.player.equipped_weapon]['name']}")
+        if self.player.equipped_armor:
+            equipped.append(f"Armor: {items[self.player.equipped_armor]['name']}")
+        if equipped:
+            print(" | ".join(equipped))
 
         print(Colors.YELLOW + f"{'='*60}" + Colors.RESET)
+
+    def adjust_reputation(self, region, amount, reason=None):
+        """Adjust regional reputation and display the result."""
+        new_rep = self.player.adjust_reputation(region, amount)
+        rep_word = "improved" if amount > 0 else "worsened"
+        print(Colors.CYAN + f"\nYour reputation in {region.capitalize()} {rep_word} by {abs(amount)}." + Colors.RESET)
+        if reason:
+            print(Colors.DARK_GRAY + f"({reason})" + Colors.RESET)
+        return new_rep
+
+    def show_board(self):
+        """Show quest board content at quest hub locations."""
+        location = locations[self.player.current_location]
+        if location.get('special') != 'quest_hub':
+            print(Colors.YELLOW + "\nThere is no quest board here." + Colors.RESET)
+            return
+
+        print(Colors.YELLOW + Colors.BOLD + "\n=== QUEST BOARD ===" + Colors.RESET)
+        available = False
+        for qid, quest in QUESTS.items():
+            if quest.location == self.player.current_location and qid not in self.player.quests and qid not in self.player.completed_quests:
+                if all(prereq in self.player.completed_quests for prereq in quest.prerequisites):
+                    print(Colors.CYAN + f"\n- {quest.name}: {quest.description}" + Colors.RESET)
+                    print(f"  Objectives: {', '.join(quest.objectives)}")
+                    available = True
+        if not available:
+            print(Colors.GREEN + "No new quests are available here at the moment." + Colors.RESET)
+        else:
+            print(Colors.YELLOW + "\nTalk to the NPC or type 'quest' to show your quest log." + Colors.RESET)
 
     def check_random_encounter(self):
         """Check for random encounters when entering dangerous areas"""
@@ -1505,36 +1671,41 @@ class Game:
             if enemy.health > 0:
                 print(Colors.RED + f"\nThe {enemy.name} attacks!" + Colors.RESET)
 
-                enemy_damage = enemy.damage
+                enemy_damage = int(enemy.damage * max(0.85, 1 - self.player.endurance * 0.02))
+                if random.random() < self.player.get_dodge_chance():
+                    print(Colors.GREEN + "\nYou dodge the enemy's attack!" + Colors.RESET)
+                else:
+                    if enemy.special_ability == 'regenerate' and random.random() < 0.3:
+                        heal = int(enemy.max_health * 0.1)
+                        enemy.health = min(enemy.health + heal, enemy.max_health)
+                        print(Colors.RED + f"The {enemy.name} regenerates {heal} health!" + Colors.RESET)
 
-                if enemy.special_ability == 'regenerate' and random.random() < 0.3:
-                    heal = int(enemy.max_health * 0.1)
-                    enemy.health = min(enemy.health + heal, enemy.max_health)
-                    print(Colors.RED + f"The {enemy.name} regenerates {heal} health!" + Colors.RESET)
+                    if enemy.special_ability == 'drain_life' and random.random() < 0.25:
+                        drain = int(enemy_damage * 0.3)
+                        enemy.health = min(enemy.health + drain, enemy.max_health)
+                        print(Colors.RED + f"The {enemy.name} drains {drain} life from you!" + Colors.RESET)
 
-                if enemy.special_ability == 'drain_life' and random.random() < 0.25:
-                    drain = int(enemy_damage * 0.3)
-                    enemy.health = min(enemy.health + drain, enemy.max_health)
-                    print(Colors.RED + f"The {enemy.name} drains {drain} life from you!" + Colors.RESET)
+                    if enemy.special_ability == 'fire_breath' and random.random() < 0.4:
+                        enemy_damage = int(enemy_damage * 1.5)
+                        print(Colors.RED + f"The {enemy.name} breathes fire!" + Colors.RESET)
 
-                if enemy.special_ability == 'fire_breath' and random.random() < 0.4:
-                    enemy_damage = int(enemy_damage * 1.5)
-                    print(Colors.RED + f"The {enemy.name} breathes fire!" + Colors.RESET)
+                    died = self.player.take_damage(enemy_damage)
+                    print(Colors.RED + f"You take {enemy_damage} damage!" + Colors.RESET)
 
-                died = self.player.take_damage(enemy_damage)
-                print(Colors.RED + f"You take {enemy_damage} damage!" + Colors.RESET)
+                    if died:
+                        print(Colors.RED + Colors.BOLD + "\nYou have been defeated!" + Colors.RESET)
+                        print(Colors.DARK_GRAY + "The darkness takes you... but the gods are not done with you yet." + Colors.RESET)
+                        self.player.health = self.player.max_health // 2
+                        self.player.mana = self.player.max_mana // 2
+                        self.player.stamina = self.player.max_stamina // 2
+                        self.player.gold = max(self.player.gold - 20, 0)
+                        self.player.current_location = 'village'
+                        print(Colors.GREEN + "\nYou awaken back in Thorndale Village, wounded but alive..." + Colors.RESET)
+                        self.in_combat = False
+                        self.current_enemy = None
+                        return
 
-                if died:
-                    print(Colors.RED + Colors.BOLD + "\nYou have been defeated!" + Colors.RESET)
-                    print(Colors.DARK_GRAY + "The darkness takes you... but the gods are not done with you yet." + Colors.RESET)
-                    self.player.health = self.player.max_health // 2
-                    self.player.mana = self.player.max_mana // 2
-                    self.player.gold = max(self.player.gold - 20, 0)
-                    self.player.current_location = 'village'
-                    print(Colors.GREEN + "\nYou awaken back in Thorndale Village, wounded but alive..." + Colors.RESET)
-                    self.in_combat = False
-                    self.current_enemy = None
-                    return
+                self.player.restore_stamina(3)
 
             if choice == '4':
                 self.player.defense -= 5
@@ -1547,6 +1718,8 @@ class Game:
                 self.player.bandits_killed += 1
             elif enemy.enemy_type == EnemyType.GOBLIN:
                 self.player.goblins_killed += 1
+
+            self.update_quest_progress_after_kill(enemy)
 
             xp_gain = enemy.xp_value
             gold_gain = enemy.gold_drop
@@ -1626,14 +1799,16 @@ class Game:
         parts = command.split()
 
         if not parts:
-            return
+            return False
 
+        location_shown = False
         verb = parts[0]
 
         # Movement commands
         if verb in ['north', 'south', 'east', 'west', 'n', 's', 'e', 'w']:
             direction = verb[0] if len(verb) == 1 else verb
             self.move_player(direction)
+            location_shown = True
 
         # Action commands
         elif verb == 'take' or verb == 'get':
@@ -1659,6 +1834,7 @@ class Game:
 
         elif verb == 'examine' or verb == 'look':
             self.display_location()
+            location_shown = True
 
         elif verb == 'equip':
             if len(parts) > 1:
@@ -1688,6 +1864,9 @@ class Game:
         elif verb == 'map':
             self.show_map()
 
+        elif verb == 'board' or verb == 'jobs':
+            self.show_board()
+
         elif verb == 'craft':
             if len(parts) > 1:
                 self.craft_item(' '.join(parts[1:]))
@@ -1699,6 +1878,7 @@ class Game:
 
         elif verb == 'travel' or verb == 'mount':
             self.fast_travel()
+            location_shown = True
 
         elif verb == 'help' or verb == 'h' or verb == '?':
             self.show_help()
@@ -1709,6 +1889,8 @@ class Game:
 
         else:
             print("I don't understand that command. Type 'help' for a list of commands.")
+
+        return location_shown
 
 
     def move_player(self, direction):
@@ -1971,15 +2153,80 @@ class Game:
         if npc.get('shop', False):
             self.open_shop(npc)
 
+        # Handle reputation changes for talking to NPCs
+        if 'reputation_effect' in npc:
+            region = self.player.current_location
+            effect = npc['reputation_effect']
+            self.adjust_reputation(region, effect, f"Spoke with {npc['name']}")
+
+        # Handle special item turn-ins and quest deliveries
+        self.process_npc_quest_deliverables(location['npc'])
+
         # Handle special services
         if 'service' in npc and npc['service'] == 'mount_rental':
             self.rent_mount()
+            if self.player.has_mount:
+                self.complete_quest_objective('stable_challenge', 'Rent a mount from Stablemaster Hrothgar')
 
         # Special NPC interactions
         if location['npc'] == 'dragon' and not self.dragon_defeated:
             self.current_enemy = ENEMIES[EnemyType.DRAGON]
             self.in_combat = True
             self.combat_loop()
+
+    def process_npc_quest_deliverables(self, npc_key):
+        """Process turn-ins or delivery quests when talking to NPCs."""
+        if npc_key == 'wizard':
+            if 'wizard_research' in self.player.quests:
+                relics = self.player.inventory.count('ancient_relic')
+                if relics >= 2:
+                    self.complete_quest_objective('wizard_research', 'Collect 2 Ancient Relics')
+                    self.complete_quest_objective('wizard_research', 'Return to the Wizard')
+        elif npc_key == 'knight':
+            if 'bandit_bounty' in self.player.quests:
+                if self.player.bandits_killed >= 3:
+                    self.complete_quest_objective('bandit_bounty', 'Defeat 3 bandits in the forest or roads')
+                if any(item == 'bandit_map' for item in self.player.inventory):
+                    self.complete_quest_objective('bandit_bounty', 'Collect proof of kills (Bandit Maps or trophies)')
+                if self.player.quests.get('bandit_bounty') and self.player.quests['bandit_bounty'].is_complete():
+                    self.complete_quest_objective('bandit_bounty', 'Return to Sir Gareth for reward')
+        elif npc_key == 'merchant':
+            if 'merchant_protection' in self.player.quests:
+                if self.player.bandits_killed + self.player.goblins_killed >= 5:
+                    self.complete_quest_objective('merchant_protection', 'Defeat 5 bandits or goblins')
+                if any(item in ['rare_gem', 'goblin_ear'] for item in self.player.inventory):
+                    self.complete_quest_objective('merchant_protection', 'Return to Trader Matthias')
+        elif npc_key == 'mermaid':
+            if 'lake_mystery' in self.player.quests and self.player.has_item('pearl'):
+                self.complete_quest_objective('lake_mystery', 'Report to Nerissa')
+        elif npc_key == 'stablemaster':
+            if 'stable_challenge' in self.player.quests and self.player.has_mount:
+                self.complete_quest_objective('stable_challenge', 'Rent a mount from Stablemaster Hrothgar')
+                if self.player.current_location == 'stable':
+                    self.complete_quest_objective('stable_challenge', 'Return to the stables')
+        elif npc_key == 'elder':
+            if 'ruins_exploration' in self.player.quests and self.player.has_item('ancient_relic'):
+                self.complete_quest_objective('ruins_exploration', 'Find an ancient relic')
+                self.complete_quest_objective('ruins_exploration', 'Return to the Village Elder')
+
+    def update_quest_progress_after_kill(self, enemy):
+        """Update quest progress after defeating a foe."""
+        if enemy.enemy_type == EnemyType.BANDIT:
+            if 'bandit_bounty' in self.player.quests:
+                self.complete_quest_objective('bandit_bounty', 'Defeat 3 bandits in the forest or roads')
+            if 'merchant_protection' in self.player.quests:
+                self.complete_quest_objective('merchant_protection', 'Defeat 5 bandits or goblins')
+        if enemy.enemy_type == EnemyType.GOBLIN:
+            if 'goblin_menace' in self.player.quests:
+                self.complete_quest_objective('goblin_menace', 'Defeat 5 goblins')
+            if 'merchant_protection' in self.player.quests:
+                self.complete_quest_objective('merchant_protection', 'Defeat 5 bandits or goblins')
+        if 'merchant_protection' in self.player.quests and self.player.bandits_killed + self.player.goblins_killed >= 5:
+            self.complete_quest_objective('merchant_protection', 'Defeat 5 bandits or goblins')
+        if 'bandit_bounty' in self.player.quests and any(item == 'bandit_map' for item in self.player.inventory):
+            self.complete_quest_objective('bandit_bounty', 'Collect proof of kills (Bandit Maps or trophies)')
+        if 'goblin_menace' in self.player.quests and any(item == 'goblin_ear' for item in self.player.inventory):
+            self.complete_quest_objective('goblin_menace', "Find proof of the goblin leader's presence")
 
     def start_quest(self, quest_id):
         """Start a new quest"""
@@ -2073,6 +2320,12 @@ class Game:
             self.player.total_gold_earned += quest.gold_reward
             print(Colors.YELLOW + f"Gained {quest.gold_reward} Gold!" + Colors.RESET)
 
+        # Reputation gain for completing quests
+        if quest.location:
+            rep_gain = 10 if quest.quest_type == QuestType.MAIN else 5 if quest.quest_type == QuestType.SIDE else 3
+            self.player.reputation[quest.location] = self.player.reputation.get(quest.location, 0) + rep_gain
+            print(Colors.CYAN + f"Your reputation in {quest.location.capitalize()} improved by {rep_gain}." + Colors.RESET)
+
         if 'item' in quest.rewards:
             item_key = quest.rewards['item']
             self.player.add_item(item_key)
@@ -2142,14 +2395,16 @@ class Game:
                 self.player.gold -= cost
                 self.player.health = self.player.max_health
                 self.player.mana = self.player.max_mana
+                self.player.stamina = self.player.max_stamina
                 print(Colors.GREEN + f"\nYou rest for the night. (-{cost} gold)" + Colors.RESET)
-                print(Colors.GREEN + f"Health and mana fully restored!" + Colors.RESET)
+                print(Colors.GREEN + f"Health, mana, and stamina fully restored!" + Colors.RESET)
             else:
                 print(Colors.YELLOW + f"\nNot enough gold for a room. Need {cost} gold." + Colors.RESET)
                 print(Colors.YELLOW + "You rest outside instead..." + Colors.RESET)
                 self.player.health = min(self.player.health + 20, self.player.max_health)
                 self.player.mana = min(self.player.mana + 15, self.player.max_mana)
-                print(Colors.GREEN + f"Recovered some health and mana." + Colors.RESET)
+                self.player.stamina = min(self.player.stamina + 20, self.player.max_stamina)
+                print(Colors.GREEN + f"Recovered some health, mana, and stamina." + Colors.RESET)
         else:
             print(Colors.YELLOW + "\nYou can only rest in safe areas like the village or tavern." + Colors.RESET)
 
@@ -2191,9 +2446,15 @@ class Game:
         print(f"Level: {stats['level']} ({stats['xp']}/{stats['xp_to_next']} XP to next)")
         print(f"Health: {stats['health']}")
         print(f"Mana: {stats['mana']}")
+        print(f"Stamina: {stats['stamina']}")
         print(f"Gold: {stats['gold']}")
         print(f"Combat Skill: {stats['combat_skill']}")
         print(f"Magic Power: {stats['magic_power']}")
+        print(f"Strength: {stats['strength']}")
+        print(f"Agility: {stats['agility']}")
+        print(f"Intelligence: {stats['intelligence']}")
+        print(f"Endurance: {stats['endurance']}")
+        print(f"Charisma: {stats['charisma']}")
         print(f"Defense: {self.player.defense}")
         print(f"Luck: {self.player.luck:.1f}")
         print(f"Items: {stats['inventory_count']}")
@@ -2209,6 +2470,18 @@ class Game:
 
         if self.player.spells_learned:
             print(f"\nSpells: {', '.join(SKILLS[s].name for s in self.player.spells_learned)}")
+
+        if stats['reputation']:
+            print(Colors.CYAN + "\nReputation:" + Colors.RESET)
+            for region, value in stats['reputation'].items():
+                label = "Neutral"
+                if value >= 50:
+                    label = "Friendly"
+                elif value <= -20:
+                    label = "Hostile"
+                elif value < 0:
+                    label = "Distrustful"
+                print(f"  {region.capitalize()}: {value} ({label})")
 
         print()
 
@@ -2379,6 +2652,7 @@ class Game:
         print("  equip [item] - Equip weapon/armor")
         print("  unequip [item] - Unequip item")
         print("  talk - Talk to NPC")
+        print("  board/jobs - Check quest board at a quest hub")
         print("  examine/look - Look around")
         print("  rest - Rest and recover (safe areas only)")
 
@@ -2435,7 +2709,10 @@ class Game:
 
             self.turn_count += 1
             command = input(Colors.BOLD + "\n> " + Colors.RESET).strip()
-            self.process_command(command)
+            location_shown = self.process_command(command)
+
+            if not self.in_combat and self.game_running and not location_shown:
+                self.display_location()
 
             # Check for game over
             if self.player.health <= 0 and not self.in_combat:
@@ -2453,5 +2730,43 @@ def main():
     except KeyboardInterrupt:
         print("\n\nGame interrupted. Thanks for playing!")
 
+
+def run_demo():
+    """Run a simple demo showcasing the key game features."""
+    print(Colors.CYAN + Colors.BOLD + "\n=== DEMO MODE: Fantasy Quest ===" + Colors.RESET)
+    game = Game()
+    game.player = Player("DemoHero")
+    game.player.gold = 200
+    game.player.inventory.extend([
+        'forest_herbs', 'forest_herbs', 'glowing_mushroom',
+        'iron_ore', 'silver_ore', 'wolf_pelt', 'troll_hide'
+    ])
+    game.player.discovered_locations = ['village', 'market', 'tavern', 'forest', 'castle']
+    game.player.visited_locations = ['village']
+
+    print(Colors.YELLOW + "\n-- Current Area Summary --" + Colors.RESET)
+    game.display_location()
+
+    print(Colors.YELLOW + "\n-- Crafting Demo --" + Colors.RESET)
+    game.show_crafting()
+    game.process_command('craft healing potion')
+    game.process_command('craft leather armor')
+    game.process_command("craft knight's sword")
+
+    print(Colors.YELLOW + "\n-- Inventory After Crafting --" + Colors.RESET)
+    game.show_inventory()
+
+    print(Colors.YELLOW + "\n-- Mount / Fast Travel Demo --" + Colors.RESET)
+    game.player.has_mount = True
+    print("You have a mount now. Use 'travel' or 'mount' in the full game to fast travel between discovered locations.")
+    game.player.current_location = 'castle'
+    print(Colors.CYAN + "\nFast travel simulated: moved to Castle Eldoria." + Colors.RESET)
+    game.display_location()
+
+    print(Colors.GREEN + "\nDemo complete. Run the full game with `python simple_fantasy_game.py`." + Colors.RESET)
+
 if __name__ == "__main__":
-    main()
+    if '--demo' in sys.argv:
+        run_demo()
+    else:
+        main()
